@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>#OpenToBoardWork — LinkedIn Frame</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --gold-dark: #8B5E0A;
+    --gold-mid: #BA7517;
+    --gold-bright: #EF9F27;
+    --gold-pale: #FAEEDA;
+    --ink: #1a1208;
+    --parchment: #fdf8f0;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--parchment);
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    font-weight: 900;
+    color: var(--gold-mid);
+  }
+  header p {
+    font-size: 14px;
+    color: #9a8a70;
+    margin-top: 6px;
+    font-weight: 300;
+  }
+
+  .card {
+    background: white;
+    border: 1px solid #e8e0d0;
+    border-radius: 16px;
+    padding: 40px;
+    max-width: 460px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 28px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.06);
+  }
+
+  #canvas {
+    width: 280px;
+    height: 280px;
+    border-radius: 50%;
+    box-shadow: 0 4px 24px rgba(186,117,23,0.25);
+    display: block;
+  }
+
+  .upload-zone {
+    width: 100%;
+    border: 2px dashed #d4c9a8;
+    border-radius: 10px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: var(--gold-pale);
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--gold-bright);
+    background: #fdf3e0;
+  }
+  .upload-zone p { font-size: 14px; color: #7a6a50; line-height: 1.6; }
+  .upload-zone strong { color: var(--gold-dark); }
+  #fileInput { display: none; }
+
+  .hint {
+    font-size: 12px;
+    color: #9a8a70;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .btn-download {
+    width: 100%;
+    padding: 16px;
+    background: var(--ink);
+    color: var(--gold-bright);
+    border: none;
+    border-radius: 10px;
+    font-family: 'Playfair Display', serif;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-download:hover { background: var(--gold-dark); color: white; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>#OpenToBoardWork</h1>
+  <p>Add the frame to your LinkedIn profile photo</p>
+</header>
+
+<div class="card">
+  <canvas id="canvas" width="1000" height="1000"></canvas>
+
+  <div class="upload-zone" id="uploadZone">
+    <p><strong>Click to upload your photo</strong><br>or drag & drop — JPG or PNG</p>
+    <input type="file" id="fileInput" accept="image/*">
+  </div>
+
+  <p class="hint">Your photo never leaves your device.<br>Download and upload directly to LinkedIn.</p>
+
+  <button class="btn-download" id="dlBtn">Download photo</button>
+</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const fileInput = document.getElementById('fileInput');
+const uploadZone = document.getElementById('uploadZone');
+const dlBtn = document.getElementById('dlBtn');
+
+drawFrame(null);
+
+uploadZone.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+uploadZone.addEventListener('drop', e => {
+  e.preventDefault();
+  uploadZone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) loadImage(file);
+});
+
+function loadImage(file) {
+  const img = new Image();
+  img.onload = () => drawFrame(img);
+  img.src = URL.createObjectURL(file);
+}
+
+function drawFrame(img) {
+  const size = 1000, cx = 500, cy = 500;
+  ctx.clearRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 490, 0, Math.PI * 2);
+  ctx.clip();
+  if (img) {
+    const scale = Math.max(size / img.width, size / img.height);
+    const w = img.width * scale, h = img.height * scale;
+    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+  } else {
+    ctx.fillStyle = '#e8e0d0';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#c4b89a';
+    ctx.beginPath(); ctx.arc(cx, 420, 120, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx, 720, 240, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Outer dark gold ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, 490, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 455, 0, Math.PI * 2, true);
+  ctx.fillStyle = '#BA7517';
+  ctx.fill();
+
+  // Inner bright gold ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, 455, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 398, 0, Math.PI * 2, true);
+  ctx.fillStyle = '#EF9F27';
+  ctx.fill();
+
+  // Inner border
+  ctx.beginPath();
+  ctx.arc(cx, cy, 398, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // Curved text — upright L-to-R along bottom arc
+  const text = '#OPENTOBOARDWORK';
+  const radius = 428;
+  ctx.font = '900 54px "Arial Black", Impact, sans-serif';
+  ctx.fillStyle = 'white';
+  ctx.textBaseline = 'middle';
+
+  const spacing = 6;
+  const chars = text.split('');
+  const widths = chars.map(c => ctx.measureText(c).width);
+  const totalWidth = widths.reduce((a, b) => a + b, 0) + spacing * (chars.length - 1);
+  const arcSpan = totalWidth / radius;
+
+  // 6 o'clock = Math.PI/2. Sweep clockwise from left edge to right edge.
+  // Rotate each char so it stands upright with baseline outward.
+  const startAngle = Math.PI / 2 - arcSpan / 2;
+
+  let angle = startAngle;
+  chars.forEach((ch, i) => {
+    const charAngle = angle + widths[i] / 2 / radius;
+    ctx.save();
+    ctx.translate(cx + radius * Math.cos(charAngle), cy + radius * Math.sin(charAngle));
+    ctx.rotate(charAngle + Math.PI / 2);
+    ctx.scale(-1, -1);
+    ctx.textAlign = 'center';
+    ctx.fillText(ch, 0, 0);
+    ctx.restore();
+    angle += (widths[i] + spacing) / radius;
+  });
+}
+
+dlBtn.addEventListener('click', () => {
+  const link = document.createElement('a');
+  link.download = 'opentoboardwork-linkedin.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+</script>
+</body>
+</html>
