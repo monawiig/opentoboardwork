@@ -56,16 +56,57 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 28px;
+    gap: 24px;
     box-shadow: 0 4px 32px rgba(0,0,0,0.06);
   }
 
-  #canvas {
+  /* Canvas wrapped in a circular clip so the preview looks like a profile pic */
+  .canvas-wrap {
+    position: relative;
     width: 280px;
     height: 280px;
     border-radius: 50%;
+    overflow: hidden;
     box-shadow: 0 4px 24px rgba(186,117,23,0.25);
+    cursor: grab;
+    user-select: none;
+    flex-shrink: 0;
+  }
+  .canvas-wrap:active { cursor: grabbing; }
+  #canvas {
+    width: 280px;
+    height: 280px;
     display: block;
+  }
+
+  /* Adjust controls — only shown after image loaded */
+  .adjust-row {
+    display: none;
+    width: 100%;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .adjust-row.visible { display: flex; }
+
+  .adjust-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-mid);
+    margin-bottom: 2px;
+  }
+
+  input[type=range] {
+    width: 100%;
+    accent-color: var(--gold-bright);
+    cursor: pointer;
+  }
+
+  .adjust-hint {
+    font-size: 12px;
+    color: #9a8a70;
+    text-align: center;
   }
 
   .upload-zone {
@@ -117,7 +158,19 @@
 </header>
 
 <div class="card">
-  <canvas id="canvas" width="1000" height="1000"></canvas>
+
+  <div class="canvas-wrap" id="canvasWrap">
+    <canvas id="canvas" width="1000" height="1000"></canvas>
+  </div>
+
+  <!-- Adjust controls -->
+  <div class="adjust-row" id="adjustRow">
+    <div>
+      <div class="adjust-label">Zoom</div>
+      <input type="range" id="zoomSlider" min="50" max="200" value="100" step="1">
+    </div>
+    <div class="adjust-hint">Drag the photo to reposition · use slider to zoom</div>
+  </div>
 
   <div class="upload-zone" id="uploadZone">
     <p><strong>Click to upload your photo</strong><br>or drag & drop — JPG or PNG</p>
@@ -135,9 +188,26 @@ const ctx = canvas.getContext('2d');
 const fileInput = document.getElementById('fileInput');
 const uploadZone = document.getElementById('uploadZone');
 const dlBtn = document.getElementById('dlBtn');
+const canvasWrap = document.getElementById('canvasWrap');
+const adjustRow = document.getElementById('adjustRow');
+const zoomSlider = document.getElementById('zoomSlider');
+
+const SIZE = 1000;
+let currentImage = null;
+
+// Photo position/zoom state
+let zoom = 1;
+let offsetX = 0;
+let offsetY = 0;
+
+// Drag state
+let dragging = false;
+let dragStartX = 0, dragStartY = 0;
+let dragOffsetX = 0, dragOffsetY = 0;
 
 drawFrame(null);
 
+// Upload
 uploadZone.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
 uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
@@ -151,25 +221,86 @@ uploadZone.addEventListener('drop', e => {
 
 function loadImage(file) {
   const img = new Image();
-  img.onload = () => drawFrame(img);
+  img.onload = () => {
+    currentImage = img;
+    zoom = 1;
+    offsetX = 0;
+    offsetY = 0;
+    zoomSlider.value = 100;
+    adjustRow.classList.add('visible');
+    drawFrame(img);
+  };
   img.src = URL.createObjectURL(file);
 }
 
+// Zoom slider
+zoomSlider.addEventListener('input', () => {
+  zoom = zoomSlider.value / 100;
+  drawFrame(currentImage);
+});
+
+// Drag to pan — mouse
+canvasWrap.addEventListener('mousedown', e => {
+  if (!currentImage) return;
+  dragging = true;
+  // Convert screen coords to canvas coords (canvas is 1000px internally, 280px on screen)
+  const scale = SIZE / 280;
+  dragStartX = e.clientX * scale;
+  dragStartY = e.clientY * scale;
+  dragOffsetX = offsetX;
+  dragOffsetY = offsetY;
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  const scale = SIZE / 280;
+  offsetX = dragOffsetX + (e.clientX * scale - dragStartX);
+  offsetY = dragOffsetY + (e.clientY * scale - dragStartY);
+  drawFrame(currentImage);
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+
+// Drag to pan — touch
+canvasWrap.addEventListener('touchstart', e => {
+  if (!currentImage) return;
+  dragging = true;
+  const scale = SIZE / 280;
+  dragStartX = e.touches[0].clientX * scale;
+  dragStartY = e.touches[0].clientY * scale;
+  dragOffsetX = offsetX;
+  dragOffsetY = offsetY;
+  e.preventDefault();
+}, { passive: false });
+window.addEventListener('touchmove', e => {
+  if (!dragging) return;
+  const scale = SIZE / 280;
+  offsetX = dragOffsetX + (e.touches[0].clientX * scale - dragStartX);
+  offsetY = dragOffsetY + (e.touches[0].clientY * scale - dragStartY);
+  drawFrame(currentImage);
+}, { passive: true });
+window.addEventListener('touchend', () => { dragging = false; });
+
 function drawFrame(img) {
-  const size = 1000, cx = 500, cy = 500;
-  ctx.clearRect(0, 0, size, size);
+  const cx = SIZE / 2, cy = SIZE / 2;
+  ctx.clearRect(0, 0, SIZE, SIZE);
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, 490, 0, Math.PI * 2);
   ctx.clip();
+
   if (img) {
-    const scale = Math.max(size / img.width, size / img.height);
-    const w = img.width * scale, h = img.height * scale;
-    ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+    // Base scale to cover the circle, then apply zoom and pan
+    const baseScale = Math.max(SIZE / img.width, SIZE / img.height);
+    const s = baseScale * zoom;
+    const w = img.width * s;
+    const h = img.height * s;
+    const x = (SIZE - w) / 2 + offsetX;
+    const y = (SIZE - h) / 2 + offsetY;
+    ctx.drawImage(img, x, y, w, h);
   } else {
     ctx.fillStyle = '#e8e0d0';
-    ctx.fillRect(0, 0, size, size);
+    ctx.fillRect(0, 0, SIZE, SIZE);
     ctx.fillStyle = '#c4b89a';
     ctx.beginPath(); ctx.arc(cx, 420, 120, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(cx, 720, 240, 0, Math.PI * 2); ctx.fill();
@@ -197,7 +328,7 @@ function drawFrame(img) {
   ctx.lineWidth = 3;
   ctx.stroke();
 
-  // Curved text — upright L-to-R along bottom arc
+  // Curved text
   const text = '#OPENTOBOARDWORK';
   const radius = 428;
   ctx.font = '900 54px "Arial Black", Impact, sans-serif';
@@ -209,14 +340,14 @@ function drawFrame(img) {
   const widths = chars.map(c => ctx.measureText(c).width);
   const totalWidth = widths.reduce((a, b) => a + b, 0) + spacing * (chars.length - 1);
   const arcSpan = totalWidth / radius;
-
-  // 6 o'clock = Math.PI/2. Sweep clockwise from left edge to right edge.
-  // Rotate each char so it stands upright with baseline outward.
   const startAngle = Math.PI / 2 - arcSpan / 2;
 
+  const revChars = [...chars].reverse();
+  const revWidths = [...widths].reverse();
+
   let angle = startAngle;
-  chars.forEach((ch, i) => {
-    const charAngle = angle + widths[i] / 2 / radius;
+  revChars.forEach((ch, i) => {
+    const charAngle = angle + revWidths[i] / 2 / radius;
     ctx.save();
     ctx.translate(cx + radius * Math.cos(charAngle), cy + radius * Math.sin(charAngle));
     ctx.rotate(charAngle + Math.PI / 2);
@@ -224,7 +355,7 @@ function drawFrame(img) {
     ctx.textAlign = 'center';
     ctx.fillText(ch, 0, 0);
     ctx.restore();
-    angle += (widths[i] + spacing) / radius;
+    angle += (revWidths[i] + spacing) / radius;
   });
 }
 
